@@ -78,7 +78,7 @@ class UserLoginSerializer(serializers.Serializer):
         # Authenticate user
         user = authenticate(
             request=self.context.get('request'),
-            email=email,
+            username=email,
             password=password
         )
 
