@@ -129,7 +129,6 @@ class LogoutUserView(generics.GenericAPIView):
                 return Response({
                     "error": "Refresh token is required"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
             token = RefreshToken(refresh_token)
             token.blacklist()
             

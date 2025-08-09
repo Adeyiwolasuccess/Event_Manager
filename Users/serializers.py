@@ -1,3 +1,5 @@
+# Users/serializers.py - COMPLETE WORKING VERSION
+
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
@@ -39,21 +41,41 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"password": "Passwords do not match."}
             )
+        
+        # Validate password is not empty
+        if not attrs['password'].strip():
+            raise serializers.ValidationError(
+                {"password": "Password cannot be empty."}
+            )
+        
         return attrs
 
     def create(self, validated_data):
         """
-        Create a new user with hashed password.
+        Create a new user with PROPERLY hashed password.
         """
+        # Remove confirm_password
         validated_data.pop('confirm_password')
-        return CustomUser.objects.create_user(
+        
+        # Extract password
+        password = validated_data.pop('password')
+        
+        # Create user WITHOUT password first
+        user = CustomUser(
             email=validated_data['email'],
             username=validated_data['username'],
             first_name=validated_data.get('first_name', ''),
             last_name=validated_data.get('last_name', ''),
             phone=validated_data.get('phone', ''),
-            password=validated_data['password']
         )
+        
+        # Set password PROPERLY using Django's method
+        user.set_password(password)
+        
+        # Save user
+        user.save()
+        
+        return user
 
 
 class UserLoginSerializer(serializers.Serializer):
@@ -65,7 +87,7 @@ class UserLoginSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         """
-        Validate credentials using Django's authentication system.
+        Validate credentials using direct password check
         """
         email = attrs.get('email')
         password = attrs.get('password')
@@ -75,25 +97,29 @@ class UserLoginSerializer(serializers.Serializer):
                 {"detail": "Both email and password are required."}
             )
 
-        # Authenticate user
-        user = authenticate(
-            request=self.context.get('request'),
-            username=email,
-            password=password
-        )
-
-        if not user:
+        try:
+            # Get user by email
+            user = CustomUser.objects.get(email=email)
+            
+            # Check if user is active
+            if not user.is_active:
+                raise serializers.ValidationError(
+                    {"detail": "This account is disabled."}
+                )
+            
+            # Check password using Django's method
+            if not user.check_password(password):
+                raise serializers.ValidationError(
+                    {"detail": "Invalid credentials."}
+                )
+            
+            attrs['user'] = user
+            return attrs
+            
+        except CustomUser.DoesNotExist:
             raise serializers.ValidationError(
-                {"detail": "Invalid credentials."}  # generic message for security
+                {"detail": "Invalid credentials."}
             )
-
-        if not user.is_active:
-            raise serializers.ValidationError(
-                {"detail": "This account is disabled."}
-            )
-
-        attrs['user'] = user
-        return attrs
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -117,6 +143,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return obj.full_name
 
 
-# Aliases for compatibility
+# Aliases for compatibility with your existing views
 RegisterSerializer = UserRegistrationSerializer
 UserSerializer = UserProfileSerializer
